@@ -153,6 +153,5 @@ AZURE_OPENAI_ENDPOINT=your_endpoint
 ## Potential Upgrades
 
 - Utilize a dedicated VectorDB to save the files
-- Add user authentication and session management
 - Add analytics dashboard for monitoring
 - Support additional document formats (PDF, DOC)
