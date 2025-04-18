@@ -70,32 +70,7 @@ app/
 
 ## Running Options
 
-### Local Development
-
-1. Create virtual environment:
-```bash
-python -m venv venv
-.\venv\Scripts\activate
-```
-
-2. Install dependencies:
-```bash
-cd backend && pip install -r requirements.txt
-cd ../frontend && pip install -r requirements.txt
-```
-
-3. Run services:
-```bash
-# Terminal 1
-cd backend
-uvicorn main:app --reload
-
-# Terminal 2
-cd frontend
-streamlit run app.py
-```
-
-### Docker Compose (Recommended)
+### Docker Compose
 
 1. Build and run containers:
 ```bash
