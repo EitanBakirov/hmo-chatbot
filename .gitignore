@@ -1,0 +1,40 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# VSCode or other IDE configs
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Virtual Environments
+.venv/
+venv/
+hmo-chatbot/
+
+# Python packaging
+*.egg-info/
+build/
+dist/
+
+# Docker
+*.tar
+*.pid
+docker-compose.override.yml
+
+# Streamlit cache
+.streamlit/
+*.pydevproject
+
+phase2_data/embedded_docs.jsonl
