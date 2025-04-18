@@ -21,7 +21,7 @@ from models import ChatRequest, ChatResponse
 from openai_utils import get_response_from_llm
 from shared.logger_config import logger
 from shared.monitoring import monitoring 
-from initialize import ensure_embeddings
+from initialize import ensure_embeddings, initialize_backend
 
 # Standard library imports
 from time import time
@@ -51,7 +51,9 @@ async def startup_event():
         version="1.0.0",
         environment="production"
     )
-    ensure_embeddings()
+    
+    # Run complete backend initialization
+    initialize_backend()
 
 @app.post("/ask", response_model=ChatResponse)
 async def ask(req: ChatRequest):

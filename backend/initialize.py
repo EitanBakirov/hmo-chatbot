@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from scripts.embed_documents import generate_embeddings
 from shared.logger_config import logger
+from retriever import load_embeddings
 
 
 def ensure_embeddings():
@@ -19,3 +20,25 @@ def ensure_embeddings():
                 error_details=str(e)
             )
             raise
+
+
+def initialize_backend():
+    """Initialize all backend components"""
+    try:
+        # First ensure embeddings exist
+        ensure_embeddings()
+        
+        # Then load them into memory
+        load_embeddings()
+        
+        logger.info("Backend initialization complete",
+            status="success",
+            components=["embeddings", "logger", "monitoring"]
+        )
+        return True
+    except Exception as e:
+        logger.error("Backend initialization failed",
+            error=str(e),
+            error_type=type(e).__name__
+        )
+        raise

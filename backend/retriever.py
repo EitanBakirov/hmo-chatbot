@@ -39,11 +39,25 @@ client = AzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
 )
 
+# Move global embedded_docs into module scope
+embedded_docs = []
 
-# Load pre-computed document embeddings
-# Each line contains: {"domain": str, "text": str, "embedding": List[float]}
-with open("phase2_data/embedded_docs.jsonl", encoding="utf-8") as f:
-    embedded_docs = [json.loads(line) for line in f]
+def load_embeddings():
+    """Load pre-computed document embeddings from JSONL file"""
+    global embedded_docs
+    try:
+        with open("phase2_data/embedded_docs.jsonl", encoding="utf-8") as f:
+            embedded_docs = [json.loads(line) for line in f]
+        logger.info("Loaded embeddings successfully",
+            count=len(embedded_docs),
+            file="phase2_data/embedded_docs.jsonl"
+        )
+    except Exception as e:
+        logger.error("Failed to load embeddings",
+            error=str(e),
+            error_type=type(e).__name__
+        )
+        raise
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     """Calculate cosine similarity between two embedding vectors

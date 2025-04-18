@@ -1,92 +1,158 @@
 # HMO Chatbot System
 
-This project is a microservice-based chatbot system that helps users inquire about services provided by Israeli health funds (HMOs), based on their personal details and membership tier.
+A microservice-based chatbot system for Israeli HMO (Health Fund) service inquiries, using RAG (Retrieval Augmented Generation) and LLM for providing accurate, personalized responses about health services.
 
-## Overview
-
-The system is composed of two main services:
-
-- **Backend**: A FastAPI server that handles LLM calls, user data collection, and RAG-based answering using context from pre-embedded HTML documents.
-- **Frontend**: A Streamlit app that provides an interactive chat interface for users.
+The system uses:
+- Azure OpenAI (GPT-4o) for chat interactions
+- FastAPI for backend services
+- Streamlit for frontend interface
+- Vector-based document retrieval
+- Docker and Docker Compose for deployment
+- Enhanced logging and monitoring
 
 ## Features
 
-- Collects user details interactively (name, ID, gender, age, HMO, card number, tier)
-- Confirms details before answering questions
-- Uses vector-based retrieval to find relevant answers from HMO service documents
-- Supports both Hebrew and English inputs
-- Dockerized and can run locally with `docker-compose`
+- Bilingual support (Hebrew/English)
+- Two-phase interaction:
+  1. User details collection
+  2. Service inquiries
+- RAG-powered answers from HMO documents
+- Real-time performance monitoring
+- Comprehensive logging system
+- Language-aware response formatting
+- Docker containerization
 
-Yes — based on your updated file structure (in the image), the `README.md` needs a small correction under **Project Structure** to reflect the actual folder layout and filenames. Here's what should be changed:
+## Tech Stack
 
+- Python 3.11
+- Azure OpenAI (GPT-4o)
+- FastAPI + Uvicorn
+- Streamlit
+- Docker and Docker Compose
+- Vector embeddings for RAG
+- Enhanced logging with metrics tracking
 
-## Project Structure
+## Getting Started
 
-```
-phase2_app/
-├── backend/
-│   ├── main.py
-│   ├── openai_utils.py
-│   ├── retriever.py
-│   ├── models.py
-│   ├── html_loader.py
-│   ├── prompts/
-│   │   ├── collect_info.txt
-│   │   └── answer_question.txt
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── app.py
-│   ├── requirements.txt
-│   └── Dockerfile
-├── data/
-│   └── embeddings.json
-├── phase2_data/
-│   └── *.html (source documents)
-├── scripts/
-│   └── embed_documents.py
-├── docker-compose.yml
-├── .env.example
-└── README.md
+### 1. Clone the repository
+```bash
+git clone https://github.com/EitanBakirov/health-maintenance-chatbot.git
+cd health-maintenance-chatbot
 ```
 
-
-## Running Locally
-
-1. Make sure you have Docker and Docker Compose installed.
-
-2. Add your Azure OpenAI credentials to `.env`:
-
-```
+### 2. Configure environment
+Copy `.env.example` to `.env` and add your Azure OpenAI credentials:
+```env
 AZURE_OPENAI_KEY=your_key_here
 AZURE_OPENAI_ENDPOINT=your_endpoint_here
 ```
 
-3. Build and run:
+## Project Structure
 
+```
+app/
+├── backend/          # FastAPI service
+│   ├── main.py      # API endpoints
+│   ├── openai_utils.py
+│   ├── retriever.py # RAG implementation
+│   ├── initialize.py
+│   └── prompts/     # System prompts
+├── frontend/        # Streamlit interface
+│   └── app.py
+├── shared/          # Common utilities
+│   ├── logger_config.py
+│   └── monitoring.py
+├── scripts/         # Data processing
+│   └── embed_documents.py
+├── phase2_data/     # Source documents
+└── docker-compose.yml
+```
+
+## Running Options
+
+### Local Development
+
+1. Create virtual environment:
 ```bash
-docker-compose up --build
+python -m venv venv
+.\venv\Scripts\activate
 ```
 
-4. Visit the frontend:
+2. Install dependencies:
+```bash
+cd backend && pip install -r requirements.txt
+cd ../frontend && pip install -r requirements.txt
+```
 
-```
-http://localhost:8501
+3. Run services:
+```bash
+# Terminal 1
+cd backend
+uvicorn main:app --reload
+
+# Terminal 2
+cd frontend
+streamlit run app.py
 ```
 
-The backend runs at:
+### Docker Compose (Recommended)
 
+1. Build and run containers:
+```bash
+docker compose up --build
 ```
-http://localhost:8000
+
+Access:
+- Frontend: http://localhost:8501
+- Backend: http://localhost:8000
+
+## API Endpoints
+
+- `POST /ask` - Main chat endpoint
+- `GET /metrics` - System monitoring
+- `GET /health` - Service health check
+
+## Monitoring & Metrics
+
+The system tracks:
+- LLM Operations
+  - Success/failure rates
+  - Response times
+  - Token usage
+- RAG Performance
+  - Query similarity scores 
+  - Document retrieval stats
+  - No-match rates
+- Conversation Flow
+  - Language statistics
+  - Phase completion rates
+  - User interaction patterns
+
+## Environment Variables
+
+Required in `.env`:
+```env
+AZURE_OPENAI_KEY=your_key
+AZURE_OPENAI_ENDPOINT=your_endpoint
 ```
+
+## Example Interaction
+
+1. Language Selection
+2. User Information Collection
+3. Service Inquiries with RAG
+4. Personalized Responses
 
 ## Notes
 
-- The backend expects the `embedded_docs.jsonl` file to exist in `phase2_data/`
-- All prompts are located in `backend/prompts/`
-- The frontend communicates with the backend using the `/ask` route
+- Requires Azure OpenAI access
+- Supports both RTL and LTR text
+- Auto-generates embeddings on first run
+- Comprehensive logging system
 
-## License
+## Potential Upgrades
 
-This project is intended for educational or internal use. Please check with your organization before deploying it to production.
-```
+- Utilize a dedicated VectorDB to save the files
+- Add user authentication and session management
+- Add analytics dashboard for monitoring
+- Support additional document formats (PDF, DOC)
