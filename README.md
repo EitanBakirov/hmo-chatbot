@@ -10,6 +10,14 @@ The system uses:
 - Docker and Docker Compose for deployment
 - Enhanced logging and monitoring
 
+## Application Screenshots
+
+### Phase 1
+![image](https://github.com/user-attachments/assets/c83e4b38-d4a1-4a1f-9f2b-96460f8faa7e)
+
+### Phase 2
+![image](https://github.com/user-attachments/assets/948aac87-9117-4383-a858-34f1809d6185)
+
 ## Features
 
 - Bilingual support (Hebrew/English)
