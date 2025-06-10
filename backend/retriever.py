@@ -24,33 +24,35 @@ from dotenv import load_dotenv
 from shared.monitoring import monitoring
 from shared.logger_config import logger
 
+# Local application imports
+from config import config  # Import centralized config
+
 # Configure Azure OpenAI
 load_dotenv()
 
 # Constants
 MIN_SIMILARITY_THRESHOLD = 0.7  # Minimum score for document relevance
-EMBEDDING_MODEL = "text-embedding-ada-002"  # Azure OpenAI embedding model
 NO_MATCH_MESSAGE = "לא נמצא מידע רלוונטי לשאלה זו. אנא נסח את השאלה מחדש או שאל על נושא אחר."
 
-# Initialize Azure OpenAI client for embeddings
+# Initialize Azure OpenAI client for embeddings using config
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
-    api_version="2024-02-15-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+    api_key=config.azure_openai.api_key,
+    api_version=config.azure_openai.api_version,
+    azure_endpoint=config.azure_openai.endpoint
 )
 
 # Move global embedded_docs into module scope
 embedded_docs = []
 
 def load_embeddings():
-    """Load pre-computed document embeddings from JSONL file"""
+    """Load pre-computed document embeddings using config path"""
     global embedded_docs
     try:
-        with open("phase2_data/embedded_docs.jsonl", encoding="utf-8") as f:
+        with open(config.embeddings_file, encoding="utf-8") as f: 
             embedded_docs = [json.loads(line) for line in f]
         logger.info("Loaded embeddings successfully",
             count=len(embedded_docs),
-            file="phase2_data/embedded_docs.jsonl"
+            file=config.embeddings_file
         )
     except Exception as e:
         logger.error("Failed to load embeddings",
@@ -73,7 +75,7 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 def embed_text(text: str) -> List[float]:
-    """Generate embedding vector for input text
+    """Generate embeddings using config model
     
     Args:
         text: Input text to embed
@@ -81,14 +83,21 @@ def embed_text(text: str) -> List[float]:
     Returns:
         List[float]: Embedding vector from Azure OpenAI
     """
-    response = client.embeddings.create(
-        model=EMBEDDING_MODEL,
-        input=[text]
-    )
-    return response.data[0].embedding
+    try:
+        response = client.embeddings.create(
+            model=config.azure_openai.embedding_model,  
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        logger.error("Embedding generation failed", error=str(e))
+        raise
 
-def retrieve_top_k(query: str, k: int = 1) -> List[Dict]:
-    """Retrieve k most relevant documents for a query"""
+def retrieve_top_k(query: str, k: int = None) -> List[Dict]:
+    """Retrieve top-k documents using config defaults"""
+    if k is None:
+        k = config.chat.top_k_documents  # Use config default
+    
     try:
         # Generate query embedding
         query_vec = embed_text(query)
@@ -98,7 +107,7 @@ def retrieve_top_k(query: str, k: int = 1) -> List[Dict]:
             {
                 "domain": doc["domain"],
                 "text": doc["text"],
-                "score": cosine_similarity(query_vec, doc["embedding"])
+                "score": cosine_similarity(np.array(query_vec), np.array(doc["embedding"]))
             }
             for doc in embedded_docs
         ]

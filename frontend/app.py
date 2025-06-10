@@ -11,6 +11,7 @@ import requests
 import re
 import json
 from time import time
+from typing import Optional
 from shared.logger_config import logger
 from shared.monitoring import monitoring
 
@@ -22,7 +23,7 @@ API_URL = "http://backend:8000/ask"
 st.set_page_config(page_title="Health Fund Chatbot", page_icon="💬")
 
 # Initialize session state
-def init_session_state():
+def init_session_state() -> None:
     """Initialize session state variables if they don't exist"""
     if "user_info" not in st.session_state:
         st.session_state.user_info = {}
@@ -35,7 +36,7 @@ def init_session_state():
         st.session_state.initialized = False
 
 # Detect text direction (Hebrew/English)
-def detect_language_direction(text):
+def detect_language_direction(text: str) -> str:
     """
     Detect if text is primarily Hebrew (RTL) or English/other (LTR)
     Returns 'rtl' for right-to-left text, 'ltr' for left-to-right
@@ -54,11 +55,11 @@ def render_message(content: str, role: str) -> None:
         content: Message text
         role: "user" or "assistant"
     """
-    direction = detect_language_direction(content) if role == "assistant" else "ltr"
-    return st.markdown(f"<div dir='{direction}'>{content}</div>", unsafe_allow_html=True)
+    direction = detect_language_direction(content)
+    st.markdown(f"<div dir='{direction}'>{content}</div>", unsafe_allow_html=True)
 
 # Validate user input
-def validate_input(user_message):
+def validate_input(user_message: str) -> tuple:
     """Validate user input before sending to backend"""
     if not user_message:
         return False, "Empty message"
@@ -67,7 +68,7 @@ def validate_input(user_message):
     return True, ""
 
 # Send message to backend
-def send_to_backend(payload):
+def send_to_backend(payload: dict) -> tuple:
     """Send payload to backend API and handle response"""
     try:
         start_time = time()
@@ -111,46 +112,6 @@ def send_to_backend(payload):
         )
         return None, f"Error: {str(e)}"
 
-# Handle phase transition
-def handle_phase_transition(answer: str) -> str:
-    """
-    Manages transition between collection and QA phases
-    
-    Args:
-        answer: LLM response containing potential transition marker
-        
-    Returns:
-        Processed answer with transition handling
-    """
-    if "PHASE:COLLECTION_COMPLETE" in answer:
-        logger.info("Phase transition detected",
-            from_phase="collection",
-            to_phase="qa"
-        )
-        parts = answer.split("PHASE:COLLECTION_COMPLETE")
-        
-        try:
-            # Find JSON block between curly braces
-            json_match = re.search(r'{.*}', parts[1], re.DOTALL)
-            if json_match:
-                user_info = json.loads(json_match.group())
-                
-                # Only transition if not already in QA phase
-                if st.session_state.current_phase != "qa":
-                    st.session_state.user_info = user_info
-                    st.session_state.current_phase = "qa"
-                    
-                    # Return confirmation message only on transition
-                    return parts[0].strip() + "\n" + parts[1].split("}", 1)[1].strip()
-                
-                # If already in QA phase, just return the answer without the transition message
-                return answer.replace("PHASE:COLLECTION_COMPLETE", "").replace(json_match.group(), "").strip()
-                
-        except Exception as e:
-            st.error(f"Error processing phase transition: {str(e)}")
-            
-    return answer
-
 # Prepare payload for Q&A phase
 def prepare_qa_payload(user_message: str, user_info: dict, history: list) -> dict:
     """
@@ -174,7 +135,7 @@ def prepare_qa_payload(user_message: str, user_info: dict, history: list) -> dic
         "tier": user_info.get("tier", "")
     }
 
-def render_page_header():
+def render_page_header() -> None:
     """Render the page title and welcome message"""
     st.title("🏥 Health Fund Chatbot")
     st.markdown("""
@@ -188,7 +149,7 @@ def render_page_header():
     Let's get started!
     """)
 
-def handle_initial_greeting():
+def handle_initial_greeting() -> None:
     """Handle the initial greeting if not already initialized"""
     if not st.session_state.initialized:
         payload = {
@@ -213,7 +174,7 @@ def display_chat_history() -> None:
         with st.chat_message(msg["role"]):
             render_message(msg["content"], msg["role"])
 
-def process_user_input(user_message: str):
+def process_user_input(user_message: str) -> bool:
     """Process and validate user input"""
     is_valid, error_msg = validate_input(user_message)
     if not is_valid:
@@ -225,7 +186,7 @@ def process_user_input(user_message: str):
         render_message(user_message, "user")
     return True
 
-def get_phase_payload(user_message: str):
+def get_phase_payload(user_message: str) -> dict:
     """Get the appropriate payload based on current phase"""
     if st.session_state.current_phase == "qa":
         return prepare_qa_payload(
@@ -241,8 +202,8 @@ def get_phase_payload(user_message: str):
         "phase": "collection"
     }
 
-def handle_bot_response(result, error):
-    """Process and display bot response"""
+def handle_bot_response(result: dict, error: Optional[str]) -> None:
+    """Process and display bot response with clean phase transition handling"""
     if error:
         monitoring.log_conversation(
             phase=st.session_state.current_phase,
@@ -253,17 +214,33 @@ def handle_bot_response(result, error):
         return
         
     answer = result["answer"]
-    display_answer = handle_phase_transition(answer)
     
+    # Handle clean phase transition
+    if result.get("phase_transition", False) and "user_info" in result:
+        # Update session state with collected user info
+        st.session_state.user_info = result["user_info"]
+        st.session_state.current_phase = "qa"
+        
+        logger.info("Phase transition completed",
+            from_phase="collection",
+            to_phase="qa",
+            user_info_fields=list(result["user_info"].keys())
+        )
+        
+        # Show success message
+        st.success("✅ Data collection completed! Now you can ask about your benefits.")
+    
+    # Log successful interaction
     monitoring.log_conversation(
         phase=st.session_state.current_phase,
         success=True,
         language=st.session_state.user_info.get("preferred_language", "he")
     )
     
-    st.session_state.history.append({"role": "assistant", "content": display_answer})
+    # Add to history and display
+    st.session_state.history.append({"role": "assistant", "content": answer})
     with st.chat_message("assistant"):
-        render_message(display_answer, "assistant")
+        render_message(answer, "assistant")
 
 def main():
     """Main application function"""

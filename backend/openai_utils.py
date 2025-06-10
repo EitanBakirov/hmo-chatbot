@@ -1,5 +1,5 @@
 """
-OpenAI Utilities Module
+OpenAI Utilities Module with centralized configuration
 
 Handles Azure OpenAI API interactions, prompt management, and language detection
 for the HMO chatbot system. Supports both information collection and QA phases
@@ -11,35 +11,34 @@ import os
 import re
 import logging
 from time import time
+import json
+from typing import Dict, List
 
 # Third-party imports
+import numpy as np
 from openai import AzureOpenAI
-from fastapi import HTTPException
-from dotenv import load_dotenv
+from openai.types.chat import (
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam, 
+    ChatCompletionAssistantMessageParam
+)
 
 # Local imports
 from models import ChatRequest
 from retriever import retrieve_top_k
 from shared.logger_config import logger
-from shared.monitoring import monitoring
+from function_definitions import COLLECTION_FUNCTIONS
+from config import config  # Import centralized config
 
-# Configure base paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROMPTS_DIR = os.path.join(BASE_DIR, "prompts")
-
-# Load environment variables for Azure OpenAI
-load_dotenv()
-
-# Initialize Azure OpenAI client
+# Initialize Azure OpenAI client using config
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
-    api_version="2024-02-15-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+    api_key=config.azure_openai.api_key,
+    api_version=config.azure_openai.api_version,
+    azure_endpoint=config.azure_openai.endpoint
 )
 
-
 def load_prompt(filename: str) -> str:
-    """Load prompt template from file
+    """Load system prompt from file using config path
     
     Args:
         filename: Name of prompt template file
@@ -47,8 +46,13 @@ def load_prompt(filename: str) -> str:
     Returns:
         String containing prompt template
     """
-    with open(os.path.join(PROMPTS_DIR, filename), encoding="utf-8") as f:
-        return f.read()
+    try:
+        filepath = os.path.join(config.prompts_dir, filename)
+        with open(filepath, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        logger.error("Prompt file not found", filename=filename)
+        raise
 
 def detect_language(text: str) -> str:
     """Detect primary language of input text
@@ -64,79 +68,135 @@ def detect_language(text: str) -> str:
     total = len(hebrew_chars) + len(english_chars)
     return "he" if total and len(hebrew_chars) / total > 0.6 else "en"
 
-async def get_response_from_llm(req: ChatRequest) -> dict:
+def get_response_from_llm(req: ChatRequest) -> dict:
     """Get response from Azure OpenAI based on request phase"""
     start_time = time()
     
     try:
-        if req.phase == "qa":
-            # Log RAG request
-            logger.info("Starting RAG retrieval",
-                phase="qa",
-                question_length=len(req.question)
-            )
-            
-            relevant_docs = retrieve_top_k(req.question, k=2)
-            
-            if relevant_docs[0]["domain"] == "no_match":
-                logger.info("No relevant documents found",
-                    phase="qa",
-                    question=req.question
-                )
-                return {"answer": relevant_docs[0]["text"]}
-            
-            # Log successful retrieval
-            logger.info("Documents retrieved successfully",
-                phase="qa",
-                docs_found=len(relevant_docs),
-                top_score=relevant_docs[0]["score"]
-            )
-            
-            # Combine retrieved documents for context
-            context = "\n\n".join([doc["text"] for doc in relevant_docs])
-            
-            # Format QA prompt with context
-            system_prompt = load_prompt("answer_question.txt").format(
-                hmo=req.hmo,
-                tier=req.tier,
-                context=context
-            )
+        if req.phase == "collection":
+            return handle_collection_phase(req)
         else:
-            logger.info("Collection phase request",
-                phase="collection",
-                language=req.language
-            )
-            system_prompt = load_prompt("collect_info.txt")
-
-        # Prepare messages for chat completion
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(req.history)
-        
-        # Get completion from Azure OpenAI
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            temperature=0.7
-        )
-        
-        duration_ms = int((time() - start_time) * 1000)
-        
-        # Log LLM metrics
-        monitoring.log_llm_call(
-            duration_ms=duration_ms,
-            success=True,
-            phase=req.phase,
-            response_length=len(response.choices[0].message.content)
-        )
-        
-        return {"answer": response.choices[0].message.content}
-        
+            return handle_qa_phase(req)
     except Exception as e:
-        duration_ms = int((time() - start_time) * 1000)
-        monitoring.log_llm_call(
-            duration_ms=duration_ms,
-            success=False,
-            phase=req.phase,
-            error_type=type(e).__name__
+        logger.error("LLM request failed",
+            error_type=type(e).__name__,
+            error_details=str(e),
+            phase=req.phase
         )
         raise
+
+def handle_collection_phase(req: ChatRequest) -> dict:
+    """Handle data collection phase with centralized config"""
+    logger.info("Collection phase request",
+        phase="collection",
+        language=req.language,
+        question_length=len(req.question)
+    )
+    
+    system_prompt = load_prompt("collect_info.txt")
+    messages = prepare_messages(system_prompt, req.history, req.question)
+    
+    response = client.chat.completions.create(
+        model=config.azure_openai.chat_model,           
+        messages=messages,
+        temperature=config.chat.collection_temperature,  
+        max_tokens=config.chat.max_tokens,              
+        functions=COLLECTION_FUNCTIONS,
+        function_call="auto"
+    )
+    
+    message = response.choices[0].message
+    
+    # Check if function was called (phase transition)
+    if message.function_call and message.function_call.name == "complete_data_collection":
+        try:
+            user_info = json.loads(message.function_call.arguments)
+            
+            logger.info("Phase transition triggered",
+                from_phase="collection",
+                to_phase="qa",
+                collected_fields=list(user_info.keys())
+            )
+            
+            success_message = generate_success_message(user_info.get("preferred_language", "he"))
+            
+            return {
+                "answer": message.content or success_message,
+                "phase_transition": True,
+                "user_info": user_info
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error("Function call parsing failed",
+                error=str(e),
+                raw_arguments=message.function_call.arguments
+            )
+            return {
+                "answer": "אירעה שגיאה בעיבוד המידע. אנא נסה שוב.",
+                "phase_transition": False
+            }
+    
+    # Regular collection conversation
+    return {
+        "answer": message.content,
+        "phase_transition": False
+    }
+
+def handle_qa_phase(req: ChatRequest) -> dict:
+    """Handle QA phase with centralized config"""
+    logger.info("Starting RAG retrieval",
+        phase="qa",
+        question_length=len(req.question)
+    )
+    
+    # Use config for retrieval parameters
+    relevant_docs = retrieve_top_k(
+        req.question, 
+        k=config.chat.top_k_documents 
+    )
+    
+    if relevant_docs[0]["domain"] == "no_match":
+        return {"answer": relevant_docs[0]["text"]}
+    
+    context = "\n\n".join([doc["text"] for doc in relevant_docs])
+    system_prompt = load_prompt("answer_question.txt").format(
+        hmo=req.hmo,
+        tier=req.tier,
+        context=context
+    )
+    
+    messages = prepare_messages(system_prompt, req.history, req.question)
+    
+    response = client.chat.completions.create(
+        model=config.azure_openai.chat_model,      
+        messages=messages,
+        temperature=config.chat.qa_temperature,    
+        max_tokens=config.chat.max_tokens          
+        # No functions parameter for QA phase
+    )
+    
+    return {
+        "answer": response.choices[0].message.content,
+        "phase_transition": False
+    }
+
+def generate_success_message(language: str) -> str:
+    """Generate success message for completed data collection"""
+    if language == "en":
+        return "Thank you! Your information has been collected successfully. I can now help you with questions about your health fund benefits."
+    else:
+        return "תודה רבה! המידע שלך נקלט בהצלחה. כעת אני יכול לעזור לך עם שאלות לגבי הזכויות שלך בקופת החולים."
+
+def prepare_messages(system_prompt: str, history: list, current_question: str) -> list:
+    """Prepare messages for OpenAI chat completion"""
+    messages = [ChatCompletionSystemMessageParam(role="system", content=system_prompt)]
+    
+    for msg in history:
+        if msg["role"] == "user":
+            messages.append(ChatCompletionUserMessageParam(role="user", content=msg["content"]))
+        elif msg["role"] == "assistant":
+            messages.append(ChatCompletionAssistantMessageParam(role="assistant", content=msg["content"]))
+    
+    messages.append(ChatCompletionUserMessageParam(role="user", content=current_question))
+    
+    return messages

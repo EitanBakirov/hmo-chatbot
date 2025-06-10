@@ -8,10 +8,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize Azure OpenAI client
+azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+if azure_endpoint is None:
+    raise ValueError("AZURE_OPENAI_ENDPOINT environment variable is not set.")
+
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_KEY"),
     api_version="2024-02-15-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+    azure_endpoint=azure_endpoint
 )
 
 # Define files and domain labels
@@ -32,7 +36,7 @@ def extract_text_from_html(filepath):
             tag.decompose()
         return soup.get_text(separator="\n", strip=True)
 
-def generate_embeddings():
+def generate_embeddings() -> str:
     """Generate embeddings for HTML files"""
     embedded_docs = []
     for domain, filepath in html_files.items():
