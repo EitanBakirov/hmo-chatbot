@@ -5,7 +5,7 @@ from shared.logger_config import logger
 from retriever import load_embeddings
 
 
-def ensure_embeddings():
+def ensure_embeddings() -> None:
     """Check if embeddings exist, generate if not"""
     embedding_path = Path("phase2_data/embedded_docs.jsonl")
     
@@ -22,7 +22,7 @@ def ensure_embeddings():
             raise
 
 
-def initialize_backend():
+def initialize_backend() -> bool:
     """Initialize all backend components"""
     try:
         # First ensure embeddings exist

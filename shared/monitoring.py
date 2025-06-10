@@ -12,7 +12,8 @@ class ChatbotMetrics:
     details: Dict[str, Any]
 
 class ChatbotMonitoring:
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize monitoring metrics"""
         self.metrics = {
             "llm_calls": {
                 "success": 0,
@@ -33,7 +34,7 @@ class ChatbotMonitoring:
         }
         self.logger = EnhancedLogger()
 
-    def log_llm_call(self, duration_ms: float, success: bool, **details):
+    def log_llm_call(self, duration_ms: float, success: bool, **details) -> None:
         """Log LLM API call performance"""
         status = "success" if success else "failed"
         self.metrics["llm_calls"][status] += 1
@@ -52,7 +53,7 @@ class ChatbotMonitoring:
             **details
         )
 
-    def log_rag_query(self, similarity_score: float, found_match: bool, **details):
+    def log_rag_query(self, similarity_score: float, found_match: bool, **details) -> None:
         """Log RAG query effectiveness"""
         self.metrics["rag_queries"]["total"] += 1
         if not found_match:
@@ -72,7 +73,7 @@ class ChatbotMonitoring:
             **details
         )
 
-    def log_conversation(self, phase: str, success: bool, language: str):
+    def log_conversation(self, phase: str, success: bool, language: str) -> None:
         """Log conversation flow metrics"""
         status = "success" if success else "failed"
         self.metrics["conversation"][f"{phase}_phase"][status] += 1

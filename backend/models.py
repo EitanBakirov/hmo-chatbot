@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 class ChatRequest(BaseModel):
     user_info: Dict = Field(default_factory=dict)
@@ -12,3 +12,5 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    phase_transition: Optional[bool] = False
+    user_info: Optional[Dict[str, Any]] = None

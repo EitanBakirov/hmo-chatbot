@@ -19,9 +19,12 @@ from fastapi.middleware.cors import CORSMiddleware
 # Local application imports
 from models import ChatRequest, ChatResponse
 from openai_utils import get_response_from_llm
+from initialize import initialize_backend
 from shared.logger_config import logger
-from shared.monitoring import monitoring 
-from initialize import ensure_embeddings, initialize_backend
+from config import config
+from config_validator import validate_config
+# Monitoring utilities
+from shared import monitoring
 
 # Standard library imports
 from time import time
@@ -46,11 +49,17 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Run initialization tasks"""
+    """Run initialization tasks with config validation"""
     logger.info("Starting HMO Chatbot API",
         version="1.0.0",
-        environment="production"
+        environment="production",
+        chat_model=config.azure_openai.chat_model,
+        api_version=config.azure_openai.api_version
     )
+    
+    # Validate configuration
+    if not validate_config():
+        raise RuntimeError("Configuration validation failed")
     
     # Run complete backend initialization
     initialize_backend()
@@ -61,7 +70,7 @@ async def ask(req: ChatRequest):
     start_time = time()
     
     try:
-        result = await get_response_from_llm(req)
+        result = get_response_from_llm(req) 
         duration_ms = int((time() - start_time) * 1000)
         
         logger.info("Request processed successfully",
@@ -78,7 +87,7 @@ async def ask(req: ChatRequest):
             duration_ms=duration_ms,
             phase=req.phase
         )
-        raise
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():
