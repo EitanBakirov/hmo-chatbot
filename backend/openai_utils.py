@@ -68,7 +68,7 @@ def detect_language(text: str) -> str:
     total = len(hebrew_chars) + len(english_chars)
     return "he" if total and len(hebrew_chars) / total > 0.6 else "en"
 
-def get_response_from_llm(req: ChatRequest) -> dict:
+async def get_response_from_llm(req: ChatRequest) -> dict:
     """Get response from Azure OpenAI based on request phase"""
     start_time = time()
     

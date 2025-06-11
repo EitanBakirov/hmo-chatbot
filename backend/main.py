@@ -70,7 +70,7 @@ async def ask(req: ChatRequest):
     start_time = time()
     
     try:
-        result = get_response_from_llm(req) 
+        result = await get_response_from_llm(req) 
         duration_ms = int((time() - start_time) * 1000)
         
         logger.info("Request processed successfully",
